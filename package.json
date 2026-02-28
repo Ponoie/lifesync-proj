@@ -8,8 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "server": "node --watch src/server/index.ts",
-    "server:dev": "node --watch src/server/index.ts"
+    "server": "npx tsx src/server/index.ts",
+    "server:dev": "npx tsx watch src/server/index.ts"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.1",
