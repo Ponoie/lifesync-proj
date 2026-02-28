@@ -1,15 +1,34 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { CoinBadge } from '../CoinBadge';
 import { useThemeStore } from '../../stores/themeStore';
+import { useAuthStore } from '../../stores/authStore';
+import { useCoinStore } from '../../stores/coinStore';
 
-const navItems = [
+const publicNavItems = [
   { path: '/dashboard', label: 'Dashboard', icon: '🏠' },
   { path: '/leaderboard', label: 'Leaderboard', icon: '🏆' },
 ];
 
+const adminNavItems = [
+  { path: '/admin', label: 'Admin', icon: '🔐' },
+];
+
 export function Navbar() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { theme, toggleTheme } = useThemeStore();
+  const { user, logout, hasRole } = useAuthStore();
+  const totalCoins = useCoinStore((state) => state.totalCoins);
+
+  const navItems = [...publicNavItems];
+  if (hasRole(['admin'])) {
+    navItems.push(...adminNavItems);
+  }
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   return (
     <nav
@@ -57,7 +76,17 @@ export function Navbar() {
           </div>
 
           <div className="flex items-center gap-4">
-            <CoinBadge totalCoins={250} />
+            <CoinBadge totalCoins={totalCoins} />
+            <div className="flex items-center gap-2">
+              <span
+                className={`text-sm ${
+                  theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
+                }`}
+              >
+                {user?.username}
+              </span>
+              <span className="text-lg">{user?.avatar}</span>
+            </div>
             <button
               onClick={toggleTheme}
               className={`p-2 rounded-lg transition-colors ${
@@ -68,6 +97,16 @@ export function Navbar() {
               aria-label="Toggle theme"
             >
               {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
+            <button
+              onClick={handleLogout}
+              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                theme === 'dark'
+                  ? 'bg-red-900 text-red-300 hover:bg-red-800'
+                  : 'bg-red-100 text-red-600 hover:bg-red-200'
+              }`}
+            >
+              Logout
             </button>
           </div>
         </div>
