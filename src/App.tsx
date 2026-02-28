@@ -1,10 +1,13 @@
+import { useState } from 'react';
 import { GoalCard } from './components/GoalCard';
 import { HabitItem } from './components/HabitItem';
+import { CoinBadge } from './components/CoinBadge';
 import type { Goal } from './types/goal';
 import type { Habit } from './types/habit';
 import './index.css';
 
 function App() {
+  const [totalCoins, setTotalCoins] = useState(250);
   const sampleGoals: Goal[] = [
     {
       id: '1',
@@ -52,7 +55,10 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-2xl mx-auto">
-        <h1 className="text-3xl font-bold text-gray-800 mb-6">LifeSync - Goal & Habit Tracker</h1>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-3xl font-bold text-gray-800">LifeSync - Goal & Habit Tracker</h1>
+          <CoinBadge totalCoins={totalCoins} />
+        </div>
 
         <section className="mb-8">
           <h2 className="text-xl font-semibold text-gray-700 mb-4">🎯 Goals</h2>
