@@ -29,7 +29,7 @@ export const getRanking = async (req: Request, res: Response) => {
             {
               $match: {
                 $expr: {
-                  $and [
+                  $and: [
                     { $eq: ['$userId', '$$userId'] },
                     { $eq: ['$deletedAt', null] },
                   ],
