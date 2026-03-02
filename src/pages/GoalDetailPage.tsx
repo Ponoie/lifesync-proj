@@ -16,6 +16,12 @@ export function GoalDetailPage() {
   const [goal, setGoal] = useState<ReturnType<typeof getGoalById>>(undefined);
   const [coinsEarned, setCoinsEarned] = useState<number | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [showAddSubtask, setShowAddSubtask] = useState(false);
+  const [newSubtask, setNewSubtask] = useState({
+    title: "",
+    description: "",
+    dueDate: "",
+  });
 
   useEffect(() => {
     fetchGoals();
@@ -134,6 +140,53 @@ export function GoalDetailPage() {
     }
   };
 
+  const handleAddSubtask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const goalId = goal?._id || goal?.id;
+    if (!goal || !goalId || !newSubtask.title.trim() || !newSubtask.dueDate) return;
+
+    setIsUpdating(true);
+
+    const newSubtaskData = {
+      title: newSubtask.title.trim(),
+      description: newSubtask.description.trim() || undefined,
+      dueDate: new Date(newSubtask.dueDate).toISOString(),
+      completed: false,
+    };
+
+    const updatedSubtasks = [...(goal.subtasks || []), newSubtaskData];
+
+    // Recalculate progress
+    const completedSubtasks = updatedSubtasks.filter((st) => st.completed).length;
+    const newProgress =
+      updatedSubtasks.length > 0
+        ? Math.round((completedSubtasks / updatedSubtasks.length) * 100)
+        : goal.progress;
+
+    try {
+      await updateGoal(goalId, {
+        subtasks: updatedSubtasks,
+        progress: newProgress,
+        completed: newProgress === 100,
+      });
+
+      // Reset form
+      setNewSubtask({ title: "", description: "", dueDate: "" });
+      setShowAddSubtask(false);
+
+      // Fetch fresh data to ensure UI updates
+      await fetchGoals();
+      const updatedGoal = getGoalById(goalId);
+      if (updatedGoal) {
+        setGoal(updatedGoal);
+      }
+    } catch (error) {
+      console.error("Failed to add subtask:", error);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -241,28 +294,132 @@ export function GoalDetailPage() {
       </div>
 
       {/* Subtasks Section */}
-      {goal.subtasks && goal.subtasks.length > 0 && (
-        <div
-          className={`p-6 rounded-lg border mb-6 ${
-            theme === "dark"
-              ? "bg-gray-800 border-gray-700"
-              : "bg-white border-gray-200 shadow-sm"
-          }`}
-        >
+      <div
+        className={`p-6 rounded-lg border mb-6 ${
+          theme === "dark"
+            ? "bg-gray-800 border-gray-700"
+            : "bg-white border-gray-200 shadow-sm"
+        }`}
+      >
+        <div className="flex items-center justify-between mb-4">
           <h2
-            className={`text-lg font-semibold mb-4 flex items-center gap-2 ${
+            className={`text-lg font-semibold flex items-center gap-2 ${
               theme === "dark" ? "text-white" : "text-gray-800"
             }`}
           >
             📋 Subtasks
-            <span className={`text-sm font-normal px-3 py-1 rounded-full ${
-              theme === "dark"
-                ? "bg-gray-700 text-gray-300"
-                : "bg-blue-100 text-blue-700"
-            }`}>
-              {goal.subtasks.filter((st) => st.completed).length}/{goal.subtasks.length}
-            </span>
+            {goal.subtasks && goal.subtasks.length > 0 && (
+              <span className={`text-sm font-normal px-3 py-1 rounded-full ${
+                theme === "dark"
+                  ? "bg-gray-700 text-gray-300"
+                  : "bg-blue-100 text-blue-700"
+              }`}>
+                {goal.subtasks.filter((st) => st.completed).length}/{goal.subtasks.length}
+              </span>
+            )}
           </h2>
+          <button
+            onClick={() => setShowAddSubtask(!showAddSubtask)}
+            disabled={isUpdating}
+            className={`px-3 py-1.5 rounded-lg font-medium text-sm transition-colors ${
+              theme === "dark"
+                ? "bg-blue-600 text-white hover:bg-blue-700"
+                : "bg-blue-600 text-white hover:bg-blue-700"
+            } disabled:opacity-50 disabled:cursor-not-allowed`}
+          >
+            {showAddSubtask ? "✕ Cancel" : "+ Add Subtask"}
+          </button>
+        </div>
+
+        {/* Add Subtask Form */}
+        {showAddSubtask && (
+          <form onSubmit={handleAddSubtask} className="mb-4 p-4 rounded-lg border-2 border-dashed border-blue-300 bg-blue-50 dark:bg-gray-700 dark:border-gray-600">
+            <div className="space-y-3">
+              <div>
+                <label className={`block text-sm font-medium mb-1 ${
+                  theme === "dark" ? "text-gray-300" : "text-gray-700"
+                }`}>
+                  Title *
+                </label>
+                <input
+                  type="text"
+                  value={newSubtask.title}
+                  onChange={(e) => setNewSubtask({ ...newSubtask, title: e.target.value })}
+                  placeholder="Enter subtask title"
+                  required
+                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    theme === "dark"
+                      ? "bg-gray-700 border-gray-600 text-white"
+                      : "bg-white border-gray-300"
+                  }`}
+                  disabled={isUpdating}
+                />
+              </div>
+              <div>
+                <label className={`block text-sm font-medium mb-1 ${
+                  theme === "dark" ? "text-gray-300" : "text-gray-700"
+                }`}>
+                  Description
+                </label>
+                <textarea
+                  value={newSubtask.description}
+                  onChange={(e) => setNewSubtask({ ...newSubtask, description: e.target.value })}
+                  placeholder="Enter description (optional)"
+                  rows={2}
+                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    theme === "dark"
+                      ? "bg-gray-700 border-gray-600 text-white"
+                      : "bg-white border-gray-300"
+                  }`}
+                  disabled={isUpdating}
+                />
+              </div>
+              <div>
+                <label className={`block text-sm font-medium mb-1 ${
+                  theme === "dark" ? "text-gray-300" : "text-gray-700"
+                }`}>
+                  Due Date *
+                </label>
+                <input
+                  type="date"
+                  value={newSubtask.dueDate}
+                  onChange={(e) => setNewSubtask({ ...newSubtask, dueDate: e.target.value })}
+                  required
+                  min={new Date().toISOString().split('T')[0]}
+                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    theme === "dark"
+                      ? "bg-gray-700 border-gray-600 text-white"
+                      : "bg-white border-gray-300"
+                  }`}
+                  disabled={isUpdating}
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={isUpdating || !newSubtask.title.trim() || !newSubtask.dueDate}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isUpdating ? "Adding..." : "Add Subtask"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddSubtask(false);
+                    setNewSubtask({ title: "", description: "", dueDate: "" });
+                  }}
+                  disabled={isUpdating}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </form>
+        )}
+
+        {/* Subtasks List */}
+        {goal.subtasks && goal.subtasks.length > 0 ? (
           <div className="space-y-3">
             {goal.subtasks.map((subtask, index) => (
               <div
@@ -343,8 +500,15 @@ export function GoalDetailPage() {
               </div>
             ))}
           </div>
-        </div>
-      )}
+        ) : (
+          <div className={`text-center py-8 ${
+            theme === "dark" ? "text-gray-400" : "text-gray-500"
+          }`}>
+            <p className="text-lg mb-2">No subtasks yet</p>
+            <p className="text-sm">Click "+ Add Subtask" to create your first subtask</p>
+          </div>
+        )}
+      </div>
 
       <div
         className={`p-6 rounded-lg border ${
