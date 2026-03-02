@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from 'express';
+import type { Request, Response, NextFunction } from "express";
 
 interface CircuitBreakerConfig {
   threshold: number; // Number of failures before opening
@@ -37,9 +37,9 @@ function resetCircuit(ip: string) {
 export function circuitBreakerMiddleware(
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) {
-  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  const ip = req.ip || req.socket.remoteAddress || "unknown";
   const now = Date.now();
 
   let state = ipStates.get(ip);
@@ -70,9 +70,11 @@ export function circuitBreakerMiddleware(
       // Circuit is still open, block request
       console.log(`🚫 Circuit OPEN for IP: ${ip} - Blocking request`);
       return res.status(503).json({
-        error: 'Service Unavailable',
-        message: 'Circuit breaker is open. Too many failed requests.',
-        retryAfter: Math.ceil((config.timeout - (now - state.lastFailureTime)) / 1000),
+        error: "Service Unavailable",
+        message: "Circuit breaker is open. Too many failed requests.",
+        retryAfter: Math.ceil(
+          (config.timeout - (now - state.lastFailureTime)) / 1000,
+        ),
       });
     }
   }
@@ -80,7 +82,7 @@ export function circuitBreakerMiddleware(
   // Track failures (for demo, we'll track all requests as potential failures)
   // In real implementation, this would be based on actual error responses
   const originalJson = res.json;
-  res.json = function(data) {
+  res.json = function (data) {
     const statusCode = (this as any).statusCode;
 
     // Consider 4xx and 5xx as failures
@@ -88,7 +90,9 @@ export function circuitBreakerMiddleware(
       state.failures++;
       state.lastFailureTime = now;
 
-      console.log(`⚠️ Failure detected for IP: ${ip} (${state.failures}/${config.threshold})`);
+      console.log(
+        `⚠️ Failure detected for IP: ${ip} (${state.failures}/${config.threshold})`,
+      );
 
       if (state.failures >= config.threshold && !state.isOpen) {
         state.isOpen = true;
@@ -111,11 +115,11 @@ export function circuitBreakerMiddleware(
 
 // Cleanup function for graceful shutdown
 export function cleanupCircuitBreaker() {
-  for (const [ip, state] of ipStates.entries()) {
+  for (const [, state] of ipStates.entries()) {
     if (state.resetTimeout) {
       clearTimeout(state.resetTimeout);
     }
   }
   ipStates.clear();
-  console.log('🧹 Circuit breaker states cleared');
+  console.log("🧹 Circuit breaker states cleared");
 }

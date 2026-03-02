@@ -1,4 +1,4 @@
-export type UserRole = 'guest' | 'user' | 'premium' | 'admin';
+export type UserRole = "guest" | "user" | "premium" | "admin";
 
 export interface User {
   id: string;
@@ -7,5 +7,6 @@ export interface User {
   role: UserRole;
   totalCoins: number;
   avatar?: string;
-  joinedAt: Date;
+  joinedAt?: Date;
+  lastLoginAt?: Date;
 }

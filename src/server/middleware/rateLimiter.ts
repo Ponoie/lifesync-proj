@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from 'express';
+import type { Request, Response, NextFunction } from "express";
 
 interface RateLimiterConfig {
   windowMs: number; // Time window in milliseconds
@@ -19,9 +19,9 @@ const config: RateLimiterConfig = {
 export function rateLimiterMiddleware(
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) {
-  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  const ip = req.ip || req.socket.remoteAddress || "unknown";
   const now = Date.now();
 
   let state = ipRequests.get(ip);
@@ -45,7 +45,7 @@ export function rateLimiterMiddleware(
     console.log(`   Retry after: ${retryAfter}s`);
 
     return res.status(429).json({
-      error: 'Too Many Requests',
+      error: "Too Many Requests",
       message: `Rate limit exceeded. Please try again later.`,
       retryAfter: `${retryAfter} seconds`,
       limit: config.maxRequests,
@@ -58,9 +58,12 @@ export function rateLimiterMiddleware(
   state.count++;
 
   // Add rate limit info to response headers
-  res.setHeader('X-RateLimit-Limit', config.maxRequests.toString());
-  res.setHeader('X-RateLimit-Remaining', (config.maxRequests - state.count).toString());
-  res.setHeader('X-RateLimit-Reset', new Date(state.resetTime).toISOString());
+  res.setHeader("X-RateLimit-Limit", config.maxRequests.toString());
+  res.setHeader(
+    "X-RateLimit-Remaining",
+    (config.maxRequests - state.count).toString(),
+  );
+  res.setHeader("X-RateLimit-Reset", new Date(state.resetTime).toISOString());
 
   next();
 }

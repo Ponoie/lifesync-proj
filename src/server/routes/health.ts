@@ -1,9 +1,9 @@
-import { Router } from 'express';
+import { Router } from "express";
 
 const router = Router();
 
 interface HealthStatus {
-  status: 'healthy' | 'degraded' | 'unhealthy';
+  status: "healthy" | "degraded" | "unhealthy";
   timestamp: string;
   uptime: number;
   memory: {
@@ -15,17 +15,17 @@ interface HealthStatus {
     usage: number;
   };
   services: {
-    database: 'connected' | 'disconnected';
-    cache: 'connected' | 'disconnected';
+    database: "connected" | "disconnected";
+    cache: "connected" | "disconnected";
   };
 }
 
-router.get('/', (req, res) => {
+router.get("/", (_req, res) => {
   const memoryUsage = process.memoryUsage();
   const memoryTotal = memoryUsage.heapTotal;
 
   const health: HealthStatus = {
-    status: 'healthy',
+    status: "healthy",
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     memory: {
@@ -37,42 +37,42 @@ router.get('/', (req, res) => {
       usage: process.cpuUsage().user / 1000000, // Convert to seconds
     },
     services: {
-      database: 'connected',
-      cache: 'connected',
+      database: "connected",
+      cache: "connected",
     },
   };
 
   res.json(health);
 });
 
-router.get('/detailed', (req, res) => {
+router.get("/detailed", (_req, res) => {
   const health = {
-    status: 'healthy',
+    status: "healthy",
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-    environment: process.env.NODE_ENV || 'development',
-    version: '1.0.0',
+    environment: process.env.NODE_ENV || "development",
+    version: "1.0.0",
     memory: process.memoryUsage(),
     cpu: process.cpuUsage(),
     platform: process.platform,
     nodeVersion: process.version,
     services: {
       database: {
-        status: 'connected',
-        latency: '5ms',
+        status: "connected",
+        latency: "5ms",
       },
       cache: {
-        status: 'connected',
-        latency: '1ms',
+        status: "connected",
+        latency: "1ms",
       },
     },
     metrics: {
       requestsPerMinute: 120,
-      errorRate: '0.01%',
+      errorRate: "0.01%",
       responseTime: {
-        avg: '45ms',
-        p95: '120ms',
-        p99: '200ms',
+        avg: "45ms",
+        p95: "120ms",
+        p99: "200ms",
       },
     },
   };

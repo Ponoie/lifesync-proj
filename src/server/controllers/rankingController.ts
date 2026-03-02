@@ -1,18 +1,19 @@
-import { Request, Response } from 'express';
-import { User } from '../models/User';
-import { Goal } from '../models/Goal';
-import mongoose from 'mongoose';
+import type { Request, Response } from "express";
+import { User } from "../models/User";
+import { Goal } from "../models/Goal";
+import mongoose from "mongoose";
+import type { PipelineStage } from "mongoose";
 
 // GET /api/ranking - Get leaderboard with aggregation
 export const getRanking = async (req: Request, res: Response) => {
   try {
-    const { limit = '10', timeframe = 'all' } = req.query;
+    const { limit = "10" } = req.query;
 
     const limitNum = parseInt(limit as string, 10);
     const limitCount = Math.min(Math.max(limitNum, 1), 100); // Between 1-100
 
     // Aggregation pipeline for ranking
-    const rankingPipeline = [
+    const rankingPipeline: PipelineStage[] = [
       // Match only non-deleted users
       {
         $match: {
@@ -22,16 +23,16 @@ export const getRanking = async (req: Request, res: Response) => {
       // Lookup goals
       {
         $lookup: {
-          from: 'goals',
-          as: 'goals',
-          let: { userId: '$_id' },
+          from: "goals",
+          as: "goals",
+          let: { userId: "$_id" },
           pipeline: [
             {
               $match: {
                 $expr: {
                   $and: [
-                    { $eq: ['$userId', '$$userId'] },
-                    { $eq: ['$deletedAt', null] },
+                    { $eq: ["$userId", "$$userId"] },
+                    { $eq: ["$deletedAt", null] },
                   ],
                 },
               },
@@ -42,18 +43,18 @@ export const getRanking = async (req: Request, res: Response) => {
       // Calculate statistics
       {
         $addFields: {
-          totalGoals: { $size: '$goals' },
+          totalGoals: { $size: "$goals" },
           completedGoals: {
             $size: {
               $filter: {
-                input: '$goals',
-                as: 'goal',
-                cond: { $eq: ['$$goal.completed', true] },
+                input: "$goals",
+                as: "goal",
+                cond: { $eq: ["$$goal.completed", true] },
               },
             },
           },
           totalProgress: {
-            $sum: '$goals.progress',
+            $sum: "$goals.progress",
           },
         },
       },
@@ -62,8 +63,8 @@ export const getRanking = async (req: Request, res: Response) => {
         $addFields: {
           avgProgress: {
             $cond: [
-              { $gt: ['$totalGoals', 0] },
-              { $divide: ['$totalProgress', '$totalGoals'] },
+              { $gt: ["$totalGoals", 0] },
+              { $divide: ["$totalProgress", "$totalGoals"] },
               0,
             ],
           },
@@ -74,9 +75,9 @@ export const getRanking = async (req: Request, res: Response) => {
         $addFields: {
           score: {
             $add: [
-              { $multiply: ['$totalCoins', 1] }, // Coins: 1x
-              { $multiply: ['$completedGoals', 50] }, // Completed goals: 50x
-              { $multiply: ['$avgProgress', 10] }, // Avg progress: 10x
+              { $multiply: ["$totalCoins", 1] }, // Coins: 1x
+              { $multiply: ["$completedGoals", 50] }, // Completed goals: 50x
+              { $multiply: ["$avgProgress", 10] }, // Avg progress: 10x
             ],
           },
         },
@@ -84,9 +85,9 @@ export const getRanking = async (req: Request, res: Response) => {
       // Sort by score (descending)
       {
         $sort: {
-          score: -1,
-          totalCoins: -1,
-          _id: 1,
+          score: -1 as const,
+          totalCoins: -1 as const,
+          _id: 1 as const,
         },
       },
       // Limit results
@@ -97,7 +98,7 @@ export const getRanking = async (req: Request, res: Response) => {
       {
         $addFields: {
           rank: {
-            $add: [{ $indexOfArray: [['$_id'], '$_id'] }, 1],
+            $add: [{ $indexOfArray: [["$_id"], "$_id"] }, 1],
           },
         },
       },
@@ -111,8 +112,8 @@ export const getRanking = async (req: Request, res: Response) => {
           totalCoins: 1,
           totalGoals: 1,
           completedGoals: 1,
-          avgProgress: { $round: ['$avgProgress', 2] },
-          score: { $round: ['$score', 2] },
+          avgProgress: { $round: ["$avgProgress", 2] },
+          score: { $round: ["$score", 2] },
           role: 1,
           joinedAt: 1,
         },
@@ -126,10 +127,11 @@ export const getRanking = async (req: Request, res: Response) => {
       count: rankings.length,
       data: rankings,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
     res.status(500).json({
       success: false,
-      message: error.message,
+      message: errorMessage,
     });
   }
 };
@@ -138,16 +140,17 @@ export const getRanking = async (req: Request, res: Response) => {
 export const getUserRank = async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
+    const id = Array.isArray(userId) ? userId[0] : userId;
 
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid user ID',
+        message: "Invalid user ID",
       });
     }
 
     // Aggregation to find user's rank
-    const rankPipeline = [
+    const rankPipeline: PipelineStage[] = [
       {
         $match: {
           deletedAt: null,
@@ -155,16 +158,16 @@ export const getUserRank = async (req: Request, res: Response) => {
       },
       {
         $lookup: {
-          from: 'goals',
-          as: 'goals',
-          let: { userId: '$_id' },
+          from: "goals",
+          as: "goals",
+          let: { userId: "$_id" },
           pipeline: [
             {
               $match: {
                 $expr: {
                   $and: [
-                    { $eq: ['$userId', '$$userId'] },
-                    { $eq: ['$deletedAt', null] },
+                    { $eq: ["$userId", "$$userId"] },
+                    { $eq: ["$deletedAt", null] },
                   ],
                 },
               },
@@ -174,18 +177,18 @@ export const getUserRank = async (req: Request, res: Response) => {
       },
       {
         $addFields: {
-          totalGoals: { $size: '$goals' },
+          totalGoals: { $size: "$goals" },
           completedGoals: {
             $size: {
               $filter: {
-                input: '$goals',
-                as: 'goal',
-                cond: { $eq: ['$$goal.completed', true] },
+                input: "$goals",
+                as: "goal",
+                cond: { $eq: ["$$goal.completed", true] },
               },
             },
           },
           totalProgress: {
-            $sum: '$goals.progress',
+            $sum: "$goals.progress",
           },
         },
       },
@@ -193,43 +196,40 @@ export const getUserRank = async (req: Request, res: Response) => {
         $addFields: {
           avgProgress: {
             $cond: [
-              { $gt: ['$totalGoals', 0] },
-              { $divide: ['$totalProgress', '$totalGoals'] },
+              { $gt: ["$totalGoals", 0] },
+              { $divide: ["$totalProgress", "$totalGoals"] },
               0,
             ],
           },
           score: {
             $add: [
-              { $multiply: ['$totalCoins', 1] },
-              { $multiply: ['$completedGoals', 50] },
-              { $multiply: ['$avgProgress', 10] },
+              { $multiply: ["$totalCoins", 1] },
+              { $multiply: ["$completedGoals", 50] },
+              { $multiply: ["$avgProgress", 10] },
             ],
           },
         },
       },
       {
         $sort: {
-          score: -1,
-          totalCoins: -1,
-          _id: 1,
+          score: -1 as const,
+          totalCoins: -1 as const,
+          _id: 1 as const,
         },
       },
       // Group to get rank
       {
         $group: {
           _id: null,
-          users: { $push: '$$ROOT' },
+          users: { $push: "$$ROOT" },
         },
       },
       {
         $project: {
           userRank: {
-            $indexOfArray: [
-              '$users._id',
-              new mongoose.Types.ObjectId(userId),
-            ],
+            $indexOfArray: ["$users._id", new mongoose.Types.ObjectId(id)],
           },
-          totalUsers: { $size: '$users' },
+          totalUsers: { $size: "$users" },
         },
       },
     ];
@@ -239,7 +239,7 @@ export const getUserRank = async (req: Request, res: Response) => {
     if (!result || result.length === 0 || result[0].userRank === -1) {
       return res.status(404).json({
         success: false,
-        message: 'User not found in ranking',
+        message: "User not found in ranking",
       });
     }
 
@@ -253,18 +253,19 @@ export const getUserRank = async (req: Request, res: Response) => {
         percentile: Math.round(((totalUsers - userRank) / totalUsers) * 100),
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
     res.status(500).json({
       success: false,
-      message: error.message,
+      message: errorMessage,
     });
   }
 };
 
 // GET /api/stats/overview - Get platform statistics
-export const getPlatformStats = async (req: Request, res: Response) => {
+export const getPlatformStats = async (_req: Request, res: Response) => {
   try {
-    const statsPipeline = [
+    const statsPipeline: PipelineStage[] = [
       {
         $match: {
           deletedAt: null,
@@ -274,16 +275,16 @@ export const getPlatformStats = async (req: Request, res: Response) => {
         $facet: {
           users: [
             {
-              $count: 'total',
+              $count: "total",
             },
           ],
           coins: [
             {
               $group: {
                 _id: null,
-                total: { $sum: '$totalCoins' },
-                avg: { $avg: '$totalCoins' },
-                max: { $max: '$totalCoins' },
+                total: { $sum: "$totalCoins" },
+                avg: { $avg: "$totalCoins" },
+                max: { $max: "$totalCoins" },
               },
             },
           ],
@@ -303,7 +304,7 @@ export const getPlatformStats = async (req: Request, res: Response) => {
         $facet: {
           total: [
             {
-              $count: 'count',
+              $count: "count",
             },
           ],
           completed: [
@@ -313,14 +314,14 @@ export const getPlatformStats = async (req: Request, res: Response) => {
               },
             },
             {
-              $count: 'count',
+              $count: "count",
             },
           ],
           avgProgress: [
             {
               $group: {
                 _id: null,
-                avg: { $avg: '$progress' },
+                avg: { $avg: "$progress" },
               },
             },
           ],
@@ -342,10 +343,11 @@ export const getPlatformStats = async (req: Request, res: Response) => {
         },
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
     res.status(500).json({
       success: false,
-      message: error.message,
+      message: errorMessage,
     });
   }
 };
