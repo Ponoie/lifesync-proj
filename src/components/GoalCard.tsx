@@ -1,25 +1,33 @@
-import type { Goal } from '../types/goal';
+import type { Goal } from "../types/goal";
 
 interface GoalCardProps {
   goal: Goal;
+  showStrikethrough?: boolean; // Control whether to show line-through for completed goals
 }
 
-export function GoalCard({ goal }: GoalCardProps) {
+export function GoalCard({ goal, showStrikethrough = true }: GoalCardProps) {
   const subtaskCount = goal.subtasks?.length || 0;
-  const completedSubtasks = goal.subtasks?.filter((st) => st.completed).length || 0;
+  const completedSubtasks =
+    goal.subtasks?.filter((st) => st.completed).length || 0;
 
   return (
-    <div className={`p-4 border rounded-lg transition-all ${
-      goal.completed
-        ? 'bg-green-50 border-green-300'
-        : 'bg-white border-gray-200 hover:shadow-md'
-    }`}>
+    <div
+      className={`p-4 border rounded-lg transition-all ${
+        goal.completed
+          ? "bg-green-50 border-green-300"
+          : "bg-white border-gray-200 hover:shadow-md"
+      }`}
+    >
       <div className="flex items-center justify-between">
         <div className="flex-1">
           <div className="flex items-center gap-2">
-            <h3 className={`font-semibold ${
-              goal.completed ? 'line-through text-gray-500' : 'text-gray-800'
-            }`}>
+            <h3
+              className={`font-semibold ${
+                goal.completed && showStrikethrough
+                  ? "line-through text-gray-500"
+                  : "text-gray-800"
+              }`}
+            >
               {goal.title}
             </h3>
             {goal.completed && (
@@ -40,7 +48,9 @@ export function GoalCard({ goal }: GoalCardProps) {
               <div className="flex-1 bg-gray-200 rounded-full h-1.5 max-w-[100px]">
                 <div
                   className="bg-blue-600 h-1.5 rounded-full transition-all"
-                  style={{ width: `${(completedSubtasks / subtaskCount) * 100}%` }}
+                  style={{
+                    width: `${(completedSubtasks / subtaskCount) * 100}%`,
+                  }}
                 />
               </div>
             </div>

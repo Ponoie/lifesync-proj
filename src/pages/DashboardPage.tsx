@@ -1,58 +1,56 @@
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useEffect } from "react";
 import { GoalCard } from "../components/GoalCard";
 import { HabitItem } from "../components/HabitItem";
 import { useGoalStore } from "../stores/goalStore";
+import { useHabitStore } from "../stores/habitStore";
 import { useThemeStore } from "../stores/themeStore";
 import { useAuthStore } from "../stores/authStore";
-import type { Habit } from "../types/habit";
-
-const sampleHabits: Habit[] = [
-  {
-    id: "1",
-    name: "Morning Exercise",
-    frequency: "daily",
-    streak: 5,
-    completedToday: false,
-    icon: "🏃",
-  },
-  {
-    id: "2",
-    name: "Read 30 minutes",
-    frequency: "daily",
-    streak: 12,
-    completedToday: true,
-    icon: "📚",
-  },
-];
 
 export function DashboardPage() {
   const theme = useThemeStore((state) => state.theme);
   const goals = useGoalStore((state) => state.goals);
   const fetchGoals = useGoalStore((state) => state.fetchGoals);
   const loading = useGoalStore((state) => state.loading);
+  const habits = useHabitStore((state) => state.habits);
+  const fetchHabits = useHabitStore((state) => state.fetchHabits);
   const { user, logout, isAuthenticated } = useAuthStore();
+  const location = useLocation();
 
   useEffect(() => {
     if (isAuthenticated) {
-      console.log("[DashboardPage] Component mounted, fetching goals...");
+      console.log("[DashboardPage] Component mounted/navigated, fetching goals and habits...");
       fetchGoals();
+      fetchHabits().catch((error) => {
+        console.error("[DashboardPage] Error fetching habits:", error);
+      });
     }
-  }, [fetchGoals, isAuthenticated]);
+  }, [fetchGoals, fetchHabits, isAuthenticated, location.pathname]);
 
   useEffect(() => {
     console.log("[DashboardPage] Goals state updated:", goals.length, "goals");
+    console.log("[DashboardPage] All goals with status:");
     goals.forEach((g) => {
-      console.log("[DashboardPage] Goal:", g._id || g.id, "-", g.title);
+      console.log(`  - ${g.title}: completed=${g.completed}, coinsClaimed=${g.coinsClaimed}`);
     });
   }, [goals]);
 
+  // Filter goals: show only active goals (not completed OR completed but coins not claimed)
+  const activeGoals = goals.filter((g) => !g.completed || !g.coinsClaimed);
+
+  // Completed goals that have claimed coins (for stats)
+  const completedGoalsHistory = goals.filter((g) => g.completed && g.coinsClaimed);
+
+  console.log("[DashboardPage] Active goals:", activeGoals.length);
+  console.log("[DashboardPage] Completed history:", completedGoalsHistory.length);
+  console.log("[DashboardPage] Filtered goals:", activeGoals.map(g => ({ title: g.title, completed: g.completed, coinsClaimed: g.coinsClaimed })));
+
   const stats = {
-    totalGoals: goals.length,
-    completedGoals: goals.filter((g) => g.completed).length,
-    inProgress: goals.filter((g) => !g.completed && g.progress > 0).length,
+    totalGoals: activeGoals.length + completedGoalsHistory.length, // Active + Completed from history
+    completedGoals: completedGoalsHistory.length, // Show from history
+    inProgress: activeGoals.filter((g) => !g.completed && g.progress > 0).length,
     avgProgress: Math.round(
-      goals.reduce((sum, g) => sum + g.progress, 0) / goals.length,
+      activeGoals.reduce((sum, g) => sum + g.progress, 0) / (activeGoals.length || 1),
     ),
   };
 
@@ -213,31 +211,68 @@ export function DashboardPage() {
           </Link>
         </div>
         <div className="space-y-4">
-          {goals.map((goal) => {
-            const goalId = goal._id || goal.id;
-            console.log("[DashboardPage] Rendering goal:", goalId);
-            return (
-              <Link key={goalId} to={`/goal/${goalId}`}>
-                <GoalCard goal={goal} />
-              </Link>
-            );
-          })}
+          {activeGoals.length === 0 ? (
+            <div
+              className={`text-center py-8 rounded-lg border-2 border-dashed ${
+                theme === "dark"
+                  ? "border-gray-700 text-gray-400"
+                  : "border-gray-300 text-gray-500"
+              }`}
+            >
+              <p className="text-lg mb-2">No active goals yet</p>
+              <p className="text-sm">Create your first goal to get started!</p>
+            </div>
+          ) : (
+            activeGoals.map((goal) => {
+              const goalId = goal._id || goal.id;
+              console.log("[DashboardPage] Rendering goal:", goalId);
+              return (
+                <Link key={goalId} to={`/goal/${goalId}`}>
+                  <GoalCard goal={goal} />
+                </Link>
+              );
+            })
+          )}
         </div>
       </section>
 
       {/* Habits Section */}
       <section>
-        <h2
-          className={`text-xl font-semibold mb-4 ${
-            theme === "dark" ? "text-white" : "text-gray-700"
-          }`}
-        >
-          ✨ Today's Habits
-        </h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2
+            className={`text-xl font-semibold ${
+              theme === "dark" ? "text-white" : "text-gray-700"
+            }`}
+          >
+            ✨ Today's Habits
+          </h2>
+          <Link
+            to="/habit/new"
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              theme === "dark"
+                ? "bg-purple-600 text-white hover:bg-purple-700"
+                : "bg-purple-600 text-white hover:bg-purple-700"
+            }`}
+          >
+            + Add Habit
+          </Link>
+        </div>
         <div className="space-y-3">
-          {sampleHabits.map((habit) => (
-            <HabitItem key={habit.id} habit={habit} />
-          ))}
+          {habits.length > 0 ? (
+            habits.map((habit) => (
+              <HabitItem key={habit._id || habit.id} habit={habit} />
+            ))
+          ) : (
+            <div
+              className={`text-center py-8 rounded-lg border-2 border-dashed ${
+                theme === "dark"
+                  ? "border-gray-700 text-gray-400"
+                  : "border-gray-300 text-gray-500"
+              }`}
+            >
+              <p className="text-sm">No habits yet. Create your first habit to track!</p>
+            </div>
+          )}
         </div>
       </section>
     </div>

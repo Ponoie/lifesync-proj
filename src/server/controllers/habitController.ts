@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { Habit } from "../models/Habit";
+import { Habit, IHabit } from "../models/Habit";
 import { CoinTransaction } from "../models/CoinTransaction";
 import { calculateCoinsFromHabit } from "../../utils/levelLogic";
 import mongoose from "mongoose";
@@ -20,17 +20,83 @@ function toObjectId(
   return new mongoose.Types.ObjectId(userId.toString());
 }
 
-// GET /api/habits - Get all habits for a user
+/**
+ * Check if habit is ready to be shown based on its frequency and last claim time
+ * Returns true if the habit should be visible and actionable
+ */
+function isHabitReady(habit: IHabit): boolean {
+  // If never claimed, always show
+  if (!habit.lastClaimedAt) {
+    return true;
+  }
+
+  const now = new Date();
+  const lastClaimed = new Date(habit.lastClaimedAt);
+  const timeDiff = now.getTime() - lastClaimed.getTime();
+
+  // Calculate time thresholds in milliseconds
+  const DAY = 24 * 60 * 60 * 1000;
+  const WEEK = 7 * DAY;
+  const MONTH = 30 * DAY; // Approximate as 30 days
+
+  switch (habit.frequency) {
+    case "daily":
+      // Show if at least 1 day has passed
+      return timeDiff >= DAY;
+    case "weekly":
+      // Show if at least 1 week has passed
+      return timeDiff >= WEEK;
+    case "monthly":
+      // Show if at least 1 month has passed
+      return timeDiff >= MONTH;
+    default:
+      return true;
+  }
+}
+
+// GET /api/habits - Get all habits for a user (only ready habits)
 export const getHabits = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
 
-    const habits = await Habit.findWithoutDeleted(toObjectId(userId));
+    const allHabits = await Habit.findWithoutDeleted(toObjectId(userId));
+
+    // Filter habits that are ready to be shown
+    const readyHabits = allHabits.filter(isHabitReady);
+
+    // Reset habits that are now ready (clear completed status)
+    const habitsToReset = readyHabits.filter((h) => h.coinsClaimed);
+    for (const habit of habitsToReset) {
+      habit.completedToday = false;
+      habit.coinsClaimed = false;
+      await habit.save();
+    }
 
     res.json({
       success: true,
-      count: habits.length,
-      data: habits,
+      count: readyHabits.length,
+      data: readyHabits,
+    });
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+    res.status(500).json({
+      success: false,
+      message: errorMessage,
+    });
+  }
+};
+
+// GET /api/habits/all - Get ALL habits for a user (including completed ones for history)
+export const getAllHabits = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+
+    const allHabits = await Habit.findWithoutDeleted(toObjectId(userId));
+
+    res.json({
+      success: true,
+      count: allHabits.length,
+      data: allHabits,
     });
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
@@ -65,6 +131,71 @@ export const createHabit = async (req: Request, res: Response) => {
     });
 
     res.status(201).json({
+      success: true,
+      data: habit,
+    });
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+    res.status(500).json({
+      success: false,
+      message: errorMessage,
+    });
+  }
+};
+
+// POST /api/habits/:id/toggle - Toggle habit completion status (without awarding coins)
+export const toggleHabit = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const { id } = req.params;
+    const habitId = Array.isArray(id) ? id[0] : id;
+
+    if (!mongoose.Types.ObjectId.isValid(habitId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid habit ID",
+      });
+    }
+
+    // Find habit
+    const habit = await Habit.findOne({
+      _id: habitId,
+      userId: toObjectId(userId),
+      deletedAt: null,
+    });
+
+    if (!habit) {
+      return res.status(404).json({
+        success: false,
+        message: "Habit not found",
+      });
+    }
+
+    // Don't allow toggling if coins already claimed and not yet reset
+    if (habit.coinsClaimed && !isHabitReady(habit)) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot modify habit after coins have been claimed. Wait for the next cycle.",
+      });
+    }
+
+    // Toggle completion
+    const wasCompleted = habit.completedToday;
+    habit.completedToday = !wasCompleted;
+
+    // Update streak accordingly
+    if (!wasCompleted) {
+      // Completing the habit
+      habit.streak += 1;
+      habit.lastCompletedAt = new Date();
+    } else {
+      // Uncompleting the habit
+      habit.streak = Math.max(0, habit.streak - 1);
+    }
+
+    await habit.save();
+
+    res.json({
       success: true,
       data: habit,
     });

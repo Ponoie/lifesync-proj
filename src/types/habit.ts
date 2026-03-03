@@ -1,8 +1,14 @@
 export interface Habit {
-  id: string;
+  _id?: string;
+  id?: string;
   name: string;
-  frequency: 'daily' | 'weekly' | 'monthly';
+  description?: string;
+  frequency: "daily" | "weekly" | "monthly";
   streak: number;
   completedToday: boolean;
+  lastCompletedAt?: string;
   icon?: string;
+  coinsClaimed?: boolean; // Track if coins have been claimed for completed habit
+  completedAt?: string; // When the habit was completed (for history)
+  lastClaimedAt?: string; // When coins were last claimed (for resetting habits)
 }

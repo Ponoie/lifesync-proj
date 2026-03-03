@@ -37,6 +37,7 @@ export function GoalCreationPage() {
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [error, setError] = useState("");
+  const [dateError, setDateError] = useState("");
 
   const handleNext = () => {
     if (currentStep === 1) {
@@ -76,6 +77,15 @@ export function GoalCreationPage() {
       return;
     }
 
+    // Validate due date if provided
+    if (currentSubtask.dueDate) {
+      const validationError = validateSubtaskDueDate(currentSubtask.dueDate);
+      if (validationError) {
+        setDateError(validationError);
+        return;
+      }
+    }
+
     if (editingIndex !== null) {
       // Update existing subtask
       setFormData({
@@ -101,7 +111,111 @@ export function GoalCreationPage() {
     setCurrentSubtask({ title: "", description: "", dueDate: "" });
     setIsAddingSubtask(false);
     setError("");
+    setDateError("");
   };
+
+  // Validate subtask due date based on constraints
+  const validateSubtaskDueDate = (dueDateStr: string): string => {
+    const newDueDate = new Date(dueDateStr);
+    newDueDate.setHours(0, 0, 0, 0);
+
+    // Check if goal has a target date
+    if (!formData.targetDate) {
+      return "Please set a goal target date first (Step 2)";
+    }
+
+    const goalTargetDate = new Date(formData.targetDate);
+    goalTargetDate.setHours(0, 0, 0, 0);
+
+    // Check if due date is after goal's target date
+    if (newDueDate > goalTargetDate) {
+      return `Subtask due date cannot be after goal's target date (${formatDate(goalTargetDate)})`;
+    }
+
+    // Check if due date is before today
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (newDueDate < today) {
+      return "Subtask due date cannot be in the past";
+    }
+
+    // Get existing subtasks (excluding the one being edited)
+    const existingSubtasks = editingIndex !== null
+      ? formData.subtasks.filter((_, i) => i !== editingIndex)
+      : formData.subtasks;
+
+    // Sort by due date
+    const sortedSubtasks = [...existingSubtasks].sort((a, b) => {
+      if (!a.dueDate) return 1;
+      if (!b.dueDate) return -1;
+      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+    });
+
+    // If there are existing subtasks with due dates, validate against them
+    const subtasksWithDates = sortedSubtasks.filter(st => st.dueDate);
+
+    if (subtasksWithDates.length > 0) {
+      const lastSubtask = subtasksWithDates[subtasksWithDates.length - 1];
+      if (lastSubtask.dueDate) {
+        const lastSubtaskDueDate = new Date(lastSubtask.dueDate);
+        lastSubtaskDueDate.setHours(0, 0, 0, 0);
+
+        // New subtask must be after the last subtask
+        if (newDueDate <= lastSubtaskDueDate) {
+          return `Subtask due date must be after the last subtask (${formatDate(lastSubtaskDueDate)})`;
+        }
+      }
+    }
+
+    return "";
+  };
+
+  // Helper to format date for display
+  const formatDate = (date: Date): string => {
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  };
+
+  // Get min and max dates for the date picker
+  const getDateConstraints = () => {
+    if (!formData.targetDate) return { minDate: "", maxDate: "" };
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const goalTargetDate = new Date(formData.targetDate);
+    goalTargetDate.setHours(0, 0, 0, 0);
+
+    // Get existing subtasks (excluding the one being edited)
+    const existingSubtasks = editingIndex !== null
+      ? formData.subtasks.filter((_, i) => i !== editingIndex)
+      : formData.subtasks;
+
+    // Sort by due date and filter those with due dates
+    const sortedSubtasks = [...existingSubtasks]
+      .filter(st => st.dueDate)
+      .sort((a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime());
+
+    let minDate = today.toISOString().split('T')[0];
+    let maxDate = goalTargetDate.toISOString().split('T')[0];
+
+    // If there are existing subtasks with due dates, min date should be after the last one
+    if (sortedSubtasks.length > 0) {
+      const lastSubtask = sortedSubtasks[sortedSubtasks.length - 1];
+      if (lastSubtask.dueDate) {
+        const lastSubtaskDueDate = new Date(lastSubtask.dueDate);
+        lastSubtaskDueDate.setDate(lastSubtaskDueDate.getDate() + 1); // Add 1 day
+        minDate = lastSubtaskDueDate.toISOString().split('T')[0];
+      }
+    }
+
+    return { minDate, maxDate };
+  };
+
+  const { minDate, maxDate } = getDateConstraints();
 
   const handleEditSubtask = (index: number) => {
     const subtask = formData.subtasks[index];
@@ -113,6 +227,7 @@ export function GoalCreationPage() {
     setEditingIndex(index);
     setIsAddingSubtask(true);
     setError("");
+    setDateError("");
   };
 
   const handleRemoveSubtask = (index: number) => {
@@ -483,23 +598,51 @@ export function GoalCreationPage() {
                   theme === "dark" ? "text-white" : "text-gray-700"
                 }`}
               >
-                Due Date * (leave empty for auto-calculation)
+                Due Date (optional - leave empty for auto-calculation)
               </label>
               <input
                 type="date"
                 value={currentSubtask.dueDate}
-                onChange={(e) =>
+                onChange={(e) => {
                   setCurrentSubtask({
                     ...currentSubtask,
                     dueDate: e.target.value,
-                  })
-                }
-                className={`w-full px-4 py-2 rounded-lg border ${
+                  });
+                  setDateError(""); // Clear error when user changes date
+                }}
+                min={minDate}
+                max={maxDate}
+                className={`w-full px-4 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  dateError
+                    ? "border-red-500 focus:ring-red-500"
+                    : ""
+                } ${
                   theme === "dark"
                     ? "bg-gray-700 border-gray-600 text-white"
                     : "bg-white border-gray-300"
                 }`}
               />
+              {dateError && (
+                <p className="text-red-600 text-sm mt-1">{dateError}</p>
+              )}
+              {formData.targetDate && !dateError && (
+                <p className={`text-xs mt-1 ${
+                  theme === "dark" ? "text-gray-400" : "text-gray-500"
+                }`}>
+                  {minDate && maxDate
+                    ? `Must be between ${formatDate(new Date(minDate))} and ${formatDate(new Date(maxDate))}`
+                    : `Must be on or before ${formatDate(new Date(formData.targetDate))}`
+                  }
+                  {formData.subtasks.length > (editingIndex !== null ? 1 : 0) && ` (after last subtask)`}
+                </p>
+              )}
+              {!formData.targetDate && (
+                <p className={`text-xs mt-1 ${
+                  theme === "dark" ? "text-gray-400" : "text-gray-500"
+                }`}>
+                  Set a target date in Step 2 to enable subtask scheduling
+                </p>
+              )}
             </div>
             <div className="flex gap-2">
               <button
@@ -517,6 +660,7 @@ export function GoalCreationPage() {
                     description: "",
                     dueDate: "",
                   });
+                  setDateError("");
                 }}
                 className={`px-4 py-2 rounded-lg ${
                   theme === "dark"
@@ -642,9 +786,9 @@ export function GoalCreationPage() {
       </div>
 
       {/* Error Message */}
-      {error && (
+      {(error || dateError) && (
         <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
-          {error}
+          {error || dateError}
         </div>
       )}
 

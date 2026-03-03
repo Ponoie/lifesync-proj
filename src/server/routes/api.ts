@@ -27,8 +27,15 @@ router.post(
 );
 
 // Habit routes (all require authentication)
+// IMPORTANT: More specific routes must come before parameterized routes
+router.get("/habits/all", authenticate, asyncHandler(habitController.getAllHabits));
 router.get("/habits", authenticate, asyncHandler(habitController.getHabits));
 router.post("/habits", authenticate, asyncHandler(habitController.createHabit));
+router.post(
+  "/habits/:id/toggle",
+  authenticate,
+  asyncHandler(habitController.toggleHabit),
+);
 router.post(
   "/habits/:id/complete",
   authenticate,

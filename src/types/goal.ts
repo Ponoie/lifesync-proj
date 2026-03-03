@@ -16,6 +16,7 @@ export interface Goal {
   completed: boolean;
   progress: number;
   completedAt?: string;
+  coinsClaimed?: boolean; // Track if coins have been claimed for completed goal
   milestones?: Array<{
     title: string;
     completed: boolean;

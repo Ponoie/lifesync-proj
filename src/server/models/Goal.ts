@@ -8,6 +8,7 @@ export interface IGoal extends Document {
   progress: number;
   completed: boolean;
   completedAt?: Date;
+  coinsClaimed?: boolean;
   milestones: Array<{
     title: string;
     completed: boolean;
@@ -67,6 +68,10 @@ const GoalSchema = new Schema<IGoal>(
     completedAt: {
       type: Date,
       default: null,
+    },
+    coinsClaimed: {
+      type: Boolean,
+      default: false,
     },
     milestones: [
       {

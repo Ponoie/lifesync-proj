@@ -9,6 +9,8 @@ import { authRouter } from "./routes/auth";
 import { adminRouter } from "./routes/admin";
 import { apiRouter } from "./routes/api";
 import { rankingRouter } from "./routes/ranking";
+import { coinRouter } from "./routes/coin";
+import { habitRouter } from "./routes/habit";
 import { circuitBreakerMiddleware } from "./middleware/circuitBreaker";
 import { rateLimiterMiddleware } from "./middleware/rateLimiter";
 import { errorHandler } from "./middleware/errorHandler";
@@ -42,6 +44,8 @@ app.use("/api/auth", authRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api", apiRouter);
 app.use("/api", rankingRouter);
+app.use("/api/coins", coinRouter);
+app.use("/api/habits", habitRouter);
 
 // Root endpoint
 app.get("/", (_req, res) => {

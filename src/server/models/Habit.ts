@@ -9,6 +9,9 @@ export interface IHabit extends Document {
   completedToday: boolean;
   lastCompletedAt?: Date;
   icon?: string;
+  coinsClaimed?: boolean; // Track if coins have been claimed for completed habit
+  completedAt?: Date; // When the habit was completed (for history)
+  lastClaimedAt?: Date; // When coins were last claimed (for resetting habits)
   deletedAt?: Date;
 }
 
@@ -56,6 +59,18 @@ const HabitSchema = new Schema<IHabit>(
     icon: {
       type: String,
       default: "⭐",
+    },
+    coinsClaimed: {
+      type: Boolean,
+      default: false,
+    },
+    completedAt: {
+      type: Date,
+      default: null,
+    },
+    lastClaimedAt: {
+      type: Date,
+      default: null,
     },
     deletedAt: {
       type: Date,

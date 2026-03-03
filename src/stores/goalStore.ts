@@ -1,6 +1,6 @@
-import { create } from 'zustand';
-import type { Goal } from '../types/goal';
-import { goalService, type CreateGoalData } from '../services/goalService';
+import { create } from "zustand";
+import type { Goal } from "../types/goal";
+import { goalService, type CreateGoalData } from "../services/goalService";
 
 interface GoalStore {
   goals: Goal[];
@@ -9,6 +9,7 @@ interface GoalStore {
   fetchGoals: () => Promise<void>;
   addGoal: (goal: CreateGoalData) => Promise<Goal>;
   updateGoal: (id: string, updates: Partial<Goal>) => Promise<void>;
+  updateGoalInStore: (goal: Goal) => void;
   deleteGoal: (id: string) => Promise<void>;
   completeGoal: (id: string) => Promise<{ goal: Goal; coinsEarned: number }>;
   getGoalById: (id: string) => Goal | undefined;
@@ -20,31 +21,31 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
   error: null,
 
   fetchGoals: async () => {
-    console.log('[goalStore] Fetching goals...');
+    console.log("[goalStore] Fetching goals...");
     set({ loading: true, error: null });
     try {
       const goals = await goalService.getAllGoals();
-      console.log('[goalStore] Fetched', goals.length, 'goals');
+      console.log("[goalStore] Fetched", goals.length, "goals");
       set({ goals, loading: false });
     } catch (error: any) {
-      console.error('[goalStore] Error:', error);
+      console.error("[goalStore] Error:", error);
       set({ error: error.message, loading: false });
     }
   },
 
   addGoal: async (goal) => {
-    console.log('[goalStore] Adding goal:', goal.title);
+    console.log("[goalStore] Adding goal:", goal.title);
     set({ loading: true, error: null });
     try {
       const newGoal = await goalService.createGoal(goal);
-      console.log('[goalStore] Goal added successfully:', newGoal._id);
+      console.log("[goalStore] Goal added successfully:", newGoal._id);
       set((state) => ({
         goals: [...state.goals, newGoal],
         loading: false,
       }));
       return newGoal;
     } catch (error: any) {
-      console.error('[goalStore] Error adding goal:', error);
+      console.error("[goalStore] Error adding goal:", error);
       set({ error: error.message, loading: false });
       throw error;
     }
@@ -56,7 +57,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const updatedGoal = await goalService.updateGoal(id, updates);
       set((state) => ({
         goals: state.goals.map((goal) =>
-          (goal._id || goal.id) === id ? updatedGoal : goal
+          (goal._id || goal.id) === id ? updatedGoal : goal,
         ),
         loading: false,
       }));
@@ -64,6 +65,14 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       set({ error: error.message, loading: false });
       throw error;
     }
+  },
+
+  updateGoalInStore: (goal) => {
+    set((state) => ({
+      goals: state.goals.map((g) =>
+        (g._id || g.id) === (goal._id || goal.id) ? goal : g,
+      ),
+    }));
   },
 
   deleteGoal: async (id) => {
@@ -86,7 +95,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       const result = await goalService.completeGoal(id);
       set((state) => ({
         goals: state.goals.map((goal) =>
-          (goal._id || goal.id) === id ? result.goal : goal
+          (goal._id || goal.id) === id ? result.goal : goal,
         ),
         loading: false,
       }));
@@ -97,6 +106,5 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
     }
   },
 
-  getGoalById: (id) =>
-    get().goals.find((goal) => (goal._id || goal.id) === id),
+  getGoalById: (id) => get().goals.find((goal) => (goal._id || goal.id) === id),
 }));

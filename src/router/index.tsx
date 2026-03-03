@@ -5,6 +5,8 @@ import { LoginPage } from "../pages/LoginPage";
 import { DashboardPage } from "../pages/DashboardPage";
 import { GoalDetailPage } from "../pages/GoalDetailPage";
 import { GoalCreationPage } from "../pages/GoalCreationPage";
+import { GoalHistoryPage } from "../pages/GoalHistoryPage";
+import { HabitCreationPage } from "../pages/HabitCreationPage";
 import { LeaderboardPage } from "../pages/LeaderboardPage";
 import { AdminPage } from "../pages/AdminPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
@@ -37,6 +39,14 @@ export const router = createBrowserRouter([
       {
         path: "goal/new",
         element: <GoalCreationPage />,
+      },
+      {
+        path: "habit/new",
+        element: <HabitCreationPage />,
+      },
+      {
+        path: "history",
+        element: <GoalHistoryPage />,
       },
       {
         path: "leaderboard",

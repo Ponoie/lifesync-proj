@@ -2,6 +2,7 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { useGoalStore } from "../stores/goalStore";
 import { useThemeStore } from "../stores/themeStore";
 import { useState, useEffect } from "react";
+import { CoinRewardDialog } from "../components/CoinRewardDialog";
 
 export function GoalDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -17,11 +18,15 @@ export function GoalDetailPage() {
   const [coinsEarned, setCoinsEarned] = useState<number | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const [showAddSubtask, setShowAddSubtask] = useState(false);
+  const [editingSubtaskIndex, setEditingSubtaskIndex] = useState<number | null>(null);
   const [newSubtask, setNewSubtask] = useState({
     title: "",
     description: "",
     dueDate: "",
   });
+  const [dateError, setDateError] = useState<string>("");
+  const [showCoinReward, setShowCoinReward] = useState(false);
+  const [claimedCoinsForGoal, setClaimedCoinsForGoal] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetchGoals();
@@ -102,6 +107,9 @@ export function GoalDetailPage() {
 
     setIsUpdating(true);
 
+    // Store the previous state BEFORE updating
+    const wasPreviouslyCompleted = (goal.subtasks || [])[subtaskIndex]?.completed || false;
+
     const updatedSubtasks = [...(goal.subtasks || [])];
     updatedSubtasks[subtaskIndex] = {
       ...updatedSubtasks[subtaskIndex],
@@ -120,6 +128,11 @@ export function GoalDetailPage() {
         ? Math.round((completedSubtasks / updatedSubtasks.length) * 100)
         : goal.progress;
 
+    // Check if all subtasks are now completed (and this was the last uncompleted one)
+    const allCompleted = updatedSubtasks.length > 0 &&
+      completedSubtasks === updatedSubtasks.length &&
+      !wasPreviouslyCompleted; // Was false, now true - this was the last one!
+
     try {
       await updateGoal(goalId, {
         subtasks: updatedSubtasks,
@@ -133,6 +146,15 @@ export function GoalDetailPage() {
       if (updatedGoal) {
         setGoal(updatedGoal);
       }
+
+      // Show coin reward dialog if all subtasks are completed and not yet claimed
+      if (allCompleted && goalId && !claimedCoinsForGoal.has(goalId)) {
+        console.log("[CoinReward] All subtasks completed! Showing dialog...");
+        // Delay slightly to let the UI update first
+        setTimeout(() => {
+          setShowCoinReward(true);
+        }, 500);
+      }
     } catch (error) {
       console.error("Failed to update subtask:", error);
     } finally {
@@ -145,16 +167,33 @@ export function GoalDetailPage() {
     const goalId = goal?._id || goal?.id;
     if (!goal || !goalId || !newSubtask.title.trim() || !newSubtask.dueDate) return;
 
+    // Validate due date
+    const validationError = validateSubtaskDueDate(newSubtask.dueDate);
+    if (validationError) {
+      setDateError(validationError);
+      return;
+    }
+
     setIsUpdating(true);
 
-    const newSubtaskData = {
+    const subtaskData = {
       title: newSubtask.title.trim(),
       description: newSubtask.description.trim() || undefined,
       dueDate: new Date(newSubtask.dueDate).toISOString(),
       completed: false,
     };
 
-    const updatedSubtasks = [...(goal.subtasks || []), newSubtaskData];
+    let updatedSubtasks: typeof goal.subtasks;
+
+    if (editingSubtaskIndex !== null) {
+      // Update existing subtask
+      updatedSubtasks = (goal.subtasks || []).map((st, i) =>
+        i === editingSubtaskIndex ? { ...st, ...subtaskData } : st
+      );
+    } else {
+      // Add new subtask
+      updatedSubtasks = [...(goal.subtasks || []), subtaskData];
+    }
 
     // Recalculate progress
     const completedSubtasks = updatedSubtasks.filter((st) => st.completed).length;
@@ -173,6 +212,8 @@ export function GoalDetailPage() {
       // Reset form
       setNewSubtask({ title: "", description: "", dueDate: "" });
       setShowAddSubtask(false);
+      setEditingSubtaskIndex(null);
+      setDateError("");
 
       // Fetch fresh data to ensure UI updates
       await fetchGoals();
@@ -181,9 +222,176 @@ export function GoalDetailPage() {
         setGoal(updatedGoal);
       }
     } catch (error) {
-      console.error("Failed to add subtask:", error);
+      console.error("Failed to save subtask:", error);
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  const handleEditSubtask = (index: number) => {
+    const subtask = (goal?.subtasks || [])[index];
+    if (!subtask) return;
+
+    setNewSubtask({
+      title: subtask.title,
+      description: subtask.description || "",
+      dueDate: new Date(subtask.dueDate).toISOString().split('T')[0],
+    });
+    setEditingSubtaskIndex(index);
+    setShowAddSubtask(true);
+    setDateError("");
+  };
+
+  const handleDeleteSubtask = async (index: number) => {
+    if (!confirm("Are you sure you want to delete this subtask?")) return;
+
+    const goalId = goal?._id || goal?.id;
+    if (!goal || !goalId) return;
+
+    setIsUpdating(true);
+
+    const updatedSubtasks = (goal.subtasks || []).filter((_, i) => i !== index);
+
+    // Recalculate progress
+    const completedSubtasks = updatedSubtasks.filter((st) => st.completed).length;
+    const newProgress =
+      updatedSubtasks.length > 0
+        ? Math.round((completedSubtasks / updatedSubtasks.length) * 100)
+        : 0;
+
+    try {
+      await updateGoal(goalId, {
+        subtasks: updatedSubtasks,
+        progress: newProgress,
+        completed: newProgress === 100,
+      });
+
+      // Fetch fresh data
+      await fetchGoals();
+      const updatedGoal = getGoalById(goalId);
+      if (updatedGoal) {
+        setGoal(updatedGoal);
+      }
+    } catch (error) {
+      console.error("Failed to delete subtask:", error);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  // Validate subtask due date based on constraints
+  const validateSubtaskDueDate = (dueDateStr: string): string => {
+    if (!goal) return "";
+
+    const newDueDate = new Date(dueDateStr);
+    newDueDate.setHours(0, 0, 0, 0); // Reset time to midnight for comparison
+
+    // Check if goal has a target date
+    if (!goal.targetDate) {
+      return "Goal must have a target date before adding subtasks";
+    }
+
+    const goalTargetDate = new Date(goal.targetDate);
+    goalTargetDate.setHours(0, 0, 0, 0);
+
+    // Check if due date is after goal's target date
+    if (newDueDate > goalTargetDate) {
+      return `Subtask due date cannot be after goal's target date (${formatDate(goalTargetDate)})`;
+    }
+
+    // Check if due date is before today
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (newDueDate < today) {
+      return "Subtask due date cannot be in the past";
+    }
+
+    // Get existing subtasks and sort by due date
+    const existingSubtasks = goal.subtasks || [];
+    const sortedSubtasks = [...existingSubtasks].sort((a, b) =>
+      new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
+    );
+
+    // If there are existing subtasks, validate against the last one
+    if (sortedSubtasks.length > 0) {
+      const lastSubtask = sortedSubtasks[sortedSubtasks.length - 1];
+      const lastSubtaskDueDate = new Date(lastSubtask.dueDate);
+      lastSubtaskDueDate.setHours(0, 0, 0, 0);
+
+      // New subtask must be after the last subtask
+      if (newDueDate <= lastSubtaskDueDate) {
+        return `Subtask due date must be after the last subtask (${formatDate(lastSubtaskDueDate)})`;
+      }
+
+      // Special rule: if this will be the last subtask (because we're adding it),
+      // and there are already many subtasks, suggest using goal's target date
+      // But don't enforce it strictly - just provide guidance
+      if (newDueDate < goalTargetDate) {
+        // Optional: You could add a warning here that the user should consider
+        // using the goal's target date for the final subtask
+      }
+    }
+
+    return "";
+  };
+
+  // Helper to format date for display
+  const formatDate = (date: Date): string => {
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  };
+
+  // Get min and max dates for the date picker
+  const getDateConstraints = () => {
+    if (!goal || !goal.targetDate) return { minDate: "", maxDate: "" };
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const goalTargetDate = new Date(goal.targetDate);
+    goalTargetDate.setHours(0, 0, 0, 0);
+
+    // Get existing subtasks (excluding the one being edited)
+    const existingSubtasks = editingSubtaskIndex !== null
+      ? (goal.subtasks || []).filter((_, i) => i !== editingSubtaskIndex)
+      : (goal.subtasks || []);
+
+    const sortedSubtasks = [...existingSubtasks].sort((a, b) =>
+      new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
+    );
+
+    let minDate = today.toISOString().split('T')[0];
+    let maxDate = goalTargetDate.toISOString().split('T')[0];
+
+    // If there are existing subtasks, min date should be after the last one
+    if (sortedSubtasks.length > 0) {
+      const lastSubtask = sortedSubtasks[sortedSubtasks.length - 1];
+      const lastSubtaskDueDate = new Date(lastSubtask.dueDate);
+      lastSubtaskDueDate.setDate(lastSubtaskDueDate.getDate() + 1); // Add 1 day
+      minDate = lastSubtaskDueDate.toISOString().split('T')[0];
+    }
+
+    return { minDate, maxDate };
+  };
+
+  const { minDate, maxDate } = getDateConstraints();
+
+  const handleClaimCoins = async (_newTotalCoins: number) => {
+    const goalId = goal?._id || goal?.id;
+    if (goalId) {
+      setClaimedCoinsForGoal(prev => new Set([...prev, goalId]));
+    }
+    // Refresh user data from server to get updated coins
+    // The CoinRewardDialog already updates the auth store, but we need to sync
+    try {
+      await fetchGoals();
+      // Navigate to dashboard after fetching is complete
+      navigate("/dashboard");
+    } catch (error) {
+      console.error("Failed to refresh data:", error);
     }
   };
 
@@ -319,100 +527,97 @@ export function GoalDetailPage() {
             )}
           </h2>
           <button
-            onClick={() => setShowAddSubtask(!showAddSubtask)}
-            disabled={isUpdating}
+            onClick={() => {
+              setEditingSubtaskIndex(null);
+              setNewSubtask({ title: "", description: "", dueDate: "" });
+              setDateError("");
+              setShowAddSubtask(!showAddSubtask);
+            }}
+            disabled={isUpdating || !goal.targetDate}
             className={`px-3 py-1.5 rounded-lg font-medium text-sm transition-colors ${
               theme === "dark"
                 ? "bg-blue-600 text-white hover:bg-blue-700"
                 : "bg-blue-600 text-white hover:bg-blue-700"
             } disabled:opacity-50 disabled:cursor-not-allowed`}
+            title={!goal.targetDate ? "Goal must have a target date to add subtasks" : ""}
           >
-            {showAddSubtask ? "✕ Cancel" : "+ Add Subtask"}
+            {showAddSubtask ? "✕" : "+ Add"}
           </button>
         </div>
 
-        {/* Add Subtask Form */}
+        {/* Add/Edit Subtask Form */}
         {showAddSubtask && (
-          <form onSubmit={handleAddSubtask} className="mb-4 p-4 rounded-lg border-2 border-dashed border-blue-300 bg-blue-50 dark:bg-gray-700 dark:border-gray-600">
+          <form onSubmit={handleAddSubtask} className="mb-6 p-4 bg-white border border-gray-200 rounded-lg">
+            <h3 className={`text-sm font-semibold mb-3 ${
+              theme === "dark" ? "text-white" : "text-gray-800"
+            }`}>
+              {editingSubtaskIndex !== null ? "Edit Subtask" : "New Subtask"}
+            </h3>
             <div className="space-y-3">
               <div>
-                <label className={`block text-sm font-medium mb-1 ${
-                  theme === "dark" ? "text-gray-300" : "text-gray-700"
-                }`}>
-                  Title *
-                </label>
                 <input
                   type="text"
                   value={newSubtask.title}
                   onChange={(e) => setNewSubtask({ ...newSubtask, title: e.target.value })}
-                  placeholder="Enter subtask title"
+                  placeholder="Title"
                   required
-                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    theme === "dark"
-                      ? "bg-gray-700 border-gray-600 text-white"
-                      : "bg-white border-gray-300"
-                  }`}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                   disabled={isUpdating}
                 />
               </div>
               <div>
-                <label className={`block text-sm font-medium mb-1 ${
-                  theme === "dark" ? "text-gray-300" : "text-gray-700"
-                }`}>
-                  Description
-                </label>
-                <textarea
+                <input
+                  type="text"
                   value={newSubtask.description}
                   onChange={(e) => setNewSubtask({ ...newSubtask, description: e.target.value })}
-                  placeholder="Enter description (optional)"
-                  rows={2}
-                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    theme === "dark"
-                      ? "bg-gray-700 border-gray-600 text-white"
-                      : "bg-white border-gray-300"
-                  }`}
+                  placeholder="Description (optional)"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                   disabled={isUpdating}
                 />
               </div>
-              <div>
-                <label className={`block text-sm font-medium mb-1 ${
-                  theme === "dark" ? "text-gray-300" : "text-gray-700"
-                }`}>
-                  Due Date *
-                </label>
-                <input
-                  type="date"
-                  value={newSubtask.dueDate}
-                  onChange={(e) => setNewSubtask({ ...newSubtask, dueDate: e.target.value })}
-                  required
-                  min={new Date().toISOString().split('T')[0]}
-                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    theme === "dark"
-                      ? "bg-gray-700 border-gray-600 text-white"
-                      : "bg-white border-gray-300"
-                  }`}
-                  disabled={isUpdating}
-                />
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="submit"
-                  disabled={isUpdating || !newSubtask.title.trim() || !newSubtask.dueDate}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isUpdating ? "Adding..." : "Add Subtask"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAddSubtask(false);
-                    setNewSubtask({ title: "", description: "", dueDate: "" });
-                  }}
-                  disabled={isUpdating}
-                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Cancel
-                </button>
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <input
+                    type="date"
+                    value={newSubtask.dueDate}
+                    onChange={(e) => {
+                      setNewSubtask({ ...newSubtask, dueDate: e.target.value });
+                      setDateError("");
+                    }}
+                    required
+                    min={minDate}
+                    max={maxDate}
+                    className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+                      dateError ? "border-red-500" : "border-gray-300"
+                    }`}
+                    disabled={isUpdating}
+                  />
+                  {dateError && (
+                    <p className="text-red-500 text-xs mt-1">{dateError}</p>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={isUpdating || !newSubtask.title.trim() || !newSubtask.dueDate}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isUpdating ? "..." : editingSubtaskIndex !== null ? "Save" : "Add"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddSubtask(false);
+                      setEditingSubtaskIndex(null);
+                      setNewSubtask({ title: "", description: "", dueDate: "" });
+                      setDateError("");
+                    }}
+                    disabled={isUpdating}
+                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
             </div>
           </form>
@@ -420,92 +625,75 @@ export function GoalDetailPage() {
 
         {/* Subtasks List */}
         {goal.subtasks && goal.subtasks.length > 0 ? (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {goal.subtasks.map((subtask, index) => (
               <div
                 key={index}
-                className={`p-4 rounded-lg border transition-all hover:shadow-md ${
+                className={`p-3 rounded-lg border flex items-center gap-3 ${
                   subtask.completed
-                    ? "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200"
-                    : theme === "dark"
-                      ? "bg-gray-700 border-gray-600"
-                      : "bg-gray-50 border-gray-200"
+                    ? "bg-green-50 border-green-200"
+                    : "bg-white border-gray-200"
                 }`}
               >
-                <div className="flex items-start gap-4">
-                  <button
-                    onClick={() => handleToggleSubtask(index)}
-                    disabled={isUpdating}
-                    className={`mt-1 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                <button
+                  onClick={() => handleToggleSubtask(index)}
+                  disabled={isUpdating}
+                  className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                    subtask.completed
+                      ? "bg-green-600 border-green-600 text-white"
+                      : "border-gray-300 hover:border-green-500"
+                  }`}
+                >
+                  {subtask.completed && (
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </button>
+                <div className="flex-1 min-w-0">
+                  <h3
+                    className={`font-medium text-sm ${
                       subtask.completed
-                        ? "bg-green-600 border-green-600 text-white scale-110"
-                        : theme === "dark"
-                          ? "border-gray-500 hover:border-green-500 hover:bg-green-500/20"
-                          : "border-gray-300 hover:border-green-500 hover:bg-green-500/20"
+                        ? "line-through text-green-600"
+                        : "text-gray-800"
                     }`}
                   >
-                    {subtask.completed && (
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                    )}
-                  </button>
-                  <div className="flex-1 min-w-0">
-                    <h3
-                      className={`font-semibold text-base ${
-                        subtask.completed
-                          ? "line-through text-green-600"
-                          : theme === "dark"
-                            ? "text-white"
-                            : "text-gray-800"
-                      }`}
-                    >
-                      {subtask.title}
-                    </h3>
-                    {subtask.description && (
-                      <p
-                        className={`text-sm mt-1 ${
-                          theme === "dark" ? "text-gray-400" : "text-gray-600"
-                        }`}
-                      >
-                        {subtask.description}
-                      </p>
-                    )}
-                    <div
-                      className={`text-xs mt-2 flex items-center gap-3 ${
-                        theme === "dark" ? "text-gray-500" : "text-gray-500"
-                      }`}
-                    >
-                      <span className="flex items-center gap-1">
-                        📅 Due: {new Date(subtask.dueDate).toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric'
-                        })}
-                      </span>
-                      {subtask.completed && subtask.completedAt && (
-                        <span className="flex items-center gap-1 text-green-600">
-                          ✓ {new Date(subtask.completedAt).toLocaleDateString('en-US', {
-                            month: 'short',
-                            day: 'numeric'
-                          })}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  {subtask.completed && (
-                    <span className="text-2xl">🎉</span>
+                    {subtask.title}
+                  </h3>
+                  {subtask.description && (
+                    <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">
+                      {subtask.description}
+                    </p>
                   )}
+                  <div className="text-xs text-gray-400 mt-1 flex gap-2">
+                    <span>📅 {new Date(subtask.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                    {subtask.completed && subtask.completedAt && (
+                      <span className="text-green-600">✓ {new Date(subtask.completedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => handleEditSubtask(index)}
+                    disabled={isUpdating}
+                    className="text-blue-600 hover:text-blue-700 text-xs font-medium disabled:opacity-50"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => handleDeleteSubtask(index)}
+                    disabled={isUpdating}
+                    className="text-red-500 hover:text-red-600 text-xs disabled:opacity-50"
+                  >
+                    Delete
+                  </button>
                 </div>
               </div>
             ))}
           </div>
         ) : (
-          <div className={`text-center py-8 ${
-            theme === "dark" ? "text-gray-400" : "text-gray-500"
-          }`}>
-            <p className="text-lg mb-2">No subtasks yet</p>
-            <p className="text-sm">Click "+ Add Subtask" to create your first subtask</p>
+          <div className="text-center py-8 text-gray-400">
+            <p className="text-sm">No subtasks yet. Click "+ Add" to create one.</p>
           </div>
         )}
       </div>
@@ -622,6 +810,18 @@ export function GoalDetailPage() {
             <p className="text-sm">You earned {coinsEarned} coins for completing this goal!</p>
           </div>
         </div>
+      )}
+
+      {/* Coin Reward Dialog */}
+      {goal && (goal._id || goal.id) && goal.targetDate && (
+        <CoinRewardDialog
+          isOpen={showCoinReward}
+          onClose={() => setShowCoinReward(false)}
+          goalId={goal._id || goal.id || ""}
+          subtasks={goal.subtasks || []}
+          goalTargetDate={goal.targetDate}
+          onClaimSuccess={handleClaimCoins}
+        />
       )}
     </div>
   );

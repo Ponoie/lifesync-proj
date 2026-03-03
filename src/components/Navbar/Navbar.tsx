@@ -1,41 +1,39 @@
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { CoinBadge } from '../CoinBadge';
-import { useThemeStore } from '../../stores/themeStore';
-import { useAuthStore } from '../../stores/authStore';
-import { useCoinStore } from '../../stores/coinStore';
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { CoinBadge } from "../CoinBadge";
+import { useThemeStore } from "../../stores/themeStore";
+import { useAuthStore } from "../../stores/authStore";
 
 const publicNavItems = [
-  { path: '/dashboard', label: 'Dashboard', icon: '🏠' },
-  { path: '/leaderboard', label: 'Leaderboard', icon: '🏆' },
+  { path: "/dashboard", label: "Dashboard", icon: "🏠" },
+  { path: "/history", label: "History", icon: "📜" },
+  { path: "/leaderboard", label: "Leaderboard", icon: "🏆" },
 ];
 
-const adminNavItems = [
-  { path: '/admin', label: 'Admin', icon: '🔐' },
-];
+const adminNavItems = [{ path: "/admin", label: "Admin", icon: "🔐" }];
 
 export function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { theme, toggleTheme } = useThemeStore();
   const { user, logout, hasRole } = useAuthStore();
-  const totalCoins = useCoinStore((state) => state.totalCoins);
+  const totalCoins = user?.totalCoins || 0;
 
   const navItems = [...publicNavItems];
-  if (hasRole(['admin'])) {
+  if (hasRole(["admin"])) {
     navItems.push(...adminNavItems);
   }
 
   const handleLogout = () => {
     logout();
-    navigate('/login');
+    navigate("/login");
   };
 
   return (
     <nav
       className={`border-b transition-colors ${
-        theme === 'dark'
-          ? 'bg-gray-900 border-gray-700'
-          : 'bg-white border-gray-200'
+        theme === "dark"
+          ? "bg-gray-900 border-gray-700"
+          : "bg-white border-gray-200"
       }`}
     >
       <div className="max-w-6xl mx-auto px-4 py-4">
@@ -44,7 +42,7 @@ export function Navbar() {
             <Link
               to="/dashboard"
               className={`text-xl font-bold transition-colors ${
-                theme === 'dark' ? 'text-white' : 'text-gray-800'
+                theme === "dark" ? "text-white" : "text-gray-800"
               }`}
             >
               LifeSync
@@ -59,12 +57,12 @@ export function Navbar() {
                     to={item.path}
                     className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
                       isActive
-                        ? theme === 'dark'
-                          ? 'bg-gray-800 text-white'
-                          : 'bg-blue-50 text-blue-600'
-                        : theme === 'dark'
-                        ? 'text-gray-300 hover:text-white hover:bg-gray-800'
-                        : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
+                        ? theme === "dark"
+                          ? "bg-gray-800 text-white"
+                          : "bg-blue-50 text-blue-600"
+                        : theme === "dark"
+                          ? "text-gray-300 hover:text-white hover:bg-gray-800"
+                          : "text-gray-600 hover:text-gray-800 hover:bg-gray-100"
                     }`}
                   >
                     <span>{item.icon}</span>
@@ -80,7 +78,7 @@ export function Navbar() {
             <div className="flex items-center gap-2">
               <span
                 className={`text-sm ${
-                  theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
+                  theme === "dark" ? "text-gray-400" : "text-gray-600"
                 }`}
               >
                 {user?.username}
@@ -90,20 +88,20 @@ export function Navbar() {
             <button
               onClick={toggleTheme}
               className={`p-2 rounded-lg transition-colors ${
-                theme === 'dark'
-                  ? 'bg-gray-800 text-yellow-400 hover:bg-gray-700'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                theme === "dark"
+                  ? "bg-gray-800 text-yellow-400 hover:bg-gray-700"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
               }`}
               aria-label="Toggle theme"
             >
-              {theme === 'dark' ? '☀️' : '🌙'}
+              {theme === "dark" ? "☀️" : "🌙"}
             </button>
             <button
               onClick={handleLogout}
               className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                theme === 'dark'
-                  ? 'bg-red-900 text-red-300 hover:bg-red-800'
-                  : 'bg-red-100 text-red-600 hover:bg-red-200'
+                theme === "dark"
+                  ? "bg-red-900 text-red-300 hover:bg-red-800"
+                  : "bg-red-100 text-red-600 hover:bg-red-200"
               }`}
             >
               Logout
